@@ -32,7 +32,7 @@ var createSession = function(req, res, newUser) {
     res.redirect('/');
   });
 };
-var currentSessions = [];
+
 app.get('/', function(req, res) {
   // console.log('session id : ' + req.sessionID);
   if(!req.session.user){
