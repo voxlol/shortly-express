@@ -2,6 +2,8 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
+var expressSession = require('express-session');
+var cookieParser = require('cookie-parser');
 
 
 var db = require('./app/config');
@@ -21,30 +23,42 @@ app.use(bodyParser.json());
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
+app.use(cookieParser());
+app.use(expressSession({secret:'wombat'}));
 
-
-app.get('/', 
-function(req, res) {
-  res.render('index');
+app.get('/', function(req, res) {
+  if(!req.session.username){
+    res.redirect('/login');
+  }
+  else
+    res.render('index');
 });
 
-app.get('/create', 
-function(req, res) {
-  res.render('index');
+app.get('/create', function(req, res) {
+  if(!req.session.username) {
+    res.redirect('/login');
+  } else {
+    res.render('index');
+  }
 });
 
-app.get('/links', 
-function(req, res) {
-  Links.reset().fetch().then(function(links) {
-    res.send(200, links.models);
-  });
+app.get('/links', function(req, res) {
+  if(!req.session.username) {
+    res.redirect('/login');
+  } else {
+    Links.reset().fetch().then(function(links) {
+      res.send(200, links.models);
+    });
+  }
 });
 
-app.post('/links', 
+app.post('/links',
 function(req, res) {
   var uri = req.body.url;
-
-  if (!util.isValidUrl(uri)) {
+  if(!req.session.username) {
+    res.redirect('/login');
+  }
+  else if (!util.isValidUrl(uri)) {
     console.log('Not a valid url: ', uri);
     return res.send(404);
   }
@@ -77,7 +91,46 @@ function(req, res) {
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
+app.get('/login', function (req, res) {
+  res.render('login');
+});
 
+app.post('/login', function (req, res) {
+  var userName = req.body.username;
+  var passWord = req.body.password;
+
+  var currentUserModel = Users.where({username: userName}) || undefined;
+  // find the hash from the database table, compare it to the session variable
+  // on successful login, set the req.session.token to be stored
+  var dbUser = knex('users').where({
+    username : currentUserModel.get('username'),
+    password : currentUserModel.get('password')
+  });
+
+  if(dbUser){
+    // login here. Store a variable with a session
+    req.session.token = currentUserModel.get('password');
+    res.redirect('/');
+  }else{
+    // not a user
+    res.redirect('login')
+  }
+
+});
+
+app.get('/signup', function (req, res){
+  res.render('signup');
+});
+
+app.post('/signup', function (req, res){
+  var userName = req.body.username;
+  var passWord = req.body.password;
+  var newUser = new User({'username':userName, 'password':passWord});
+  newUser.save().then(function(newUser){
+    Users.add(newUser);
+    res.redirect('/');
+  })
+});
 
 
 /************************************************************/
