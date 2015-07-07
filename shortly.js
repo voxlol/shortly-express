@@ -24,21 +24,27 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 app.use(cookieParser());
-app.use(expressSession({secret:'wombat', cookie : { maxAge: 60000 }}));
+app.use(expressSession({secret:'wombat', resave: false, saveUninitialized: true}));
 
-
+var createSession = function(req, res, newUser) {
+  return req.session.regenerate(function() {
+    req.session.user = newUser;
+    res.redirect('/');
+  });
+};
 var currentSessions = [];
 app.get('/', function(req, res) {
-  console.log('session id : ' + req.sessionID);
-  if(currentSessions.indexOf(req.sessionID) === -1){
+  // console.log('session id : ' + req.sessionID);
+  if(!req.session.user){
     res.redirect('/login');
   }
-  else
+  else {
     res.render('index');
+  }
 });
 
 app.get('/create', function(req, res) {
-  if(!req.session.token) {
+  if(!req.session.user) {
     res.redirect('/login');
   } else {
     res.render('index');
@@ -46,7 +52,7 @@ app.get('/create', function(req, res) {
 });
 
 app.get('/links', function(req, res) {
-  if(!req.session.token) {
+  if(!req.session.user) {
     res.redirect('/login');
   } else {
     Links.reset().fetch().then(function(links) {
@@ -58,7 +64,7 @@ app.get('/links', function(req, res) {
 app.post('/links',
 function(req, res) {
   var uri = req.body.url;
-  if(!req.session.token) {
+  if(!req.session.user) {
     res.redirect('/login');
   }
   else if (!util.isValidUrl(uri)) {
@@ -95,44 +101,64 @@ function(req, res) {
 // Write your authentication routes here
 /************************************************************/
 app.get('/login', function (req, res) {
+  // console.log(req.session.user);
   res.render('login');
 });
 
 app.post('/login', function (req, res) {
-  var userName = req.body.username;
-  var passWord = req.body.password;
+  var username = req.body.username;
+  var password = req.body.password;
 
-  var currentUserModel = Users.where({username: userName}) || undefined;
-
-  if(currentUserModel[0] !== undefined){
-    db.knex.select('password').from('users');
-    if(!db.knex) console.log('knex connection error');
-    // db.knex.select('password').from('users').where({
-    //   username : currentUserModel[0].get('username'),
-    //   password : currentUserModel[0].get('password')
-    // }).then(function(d){
-    //   req.session.token = currentUserModel[0].get('password');
-    //   currentSessions.push(req.sessionID);
-    //   console.log(currentSessions);
-    //   res.redirect('/');
-    // })
-  }else{
-    res.redirect('/login');
-  }
+  new User({'username': username})
+    .fetch().then(function(user) {
+      if(!user) {
+        res.redirect('/login');
+        console.log('WRECK DAT SESSION!!!');
+      } else {
+        console.log('You are a user');
+        user.comparePassword(password, function(match) {
+            console.log('helllo world!!!');
+            console.log(match);
+          if(match) {
+            createSession(req, res, user);
+          } else {
+            res.redirect('/login');
+          }
+        });
+      }
+    });
 });
+
+app.get('/logout', function(req, res) {
+  req.session.destroy(function() {
+    res.redirect('/login');
+  })
+})
 
 app.get('/signup', function (req, res){
   res.render('signup');
 });
 
+
 app.post('/signup', function (req, res){
-  var userName = req.body.username;
-  var passWord = req.body.password;
-  var newUser = new User({'username':userName, 'password':passWord});
-  newUser.save().then(function(newUser){
-    Users.add(newUser);
-    res.redirect('/');
-  })
+  var username = req.body.username;
+  var password = req.body.password;
+  new User({'username':username })
+    .fetch().then(function(user) {
+      if(!user) {
+        var newUser = new User({
+          username:  username,
+          password: password
+        });
+        newUser.save().then(function(newUser){
+          createSession(req, res, newUser);
+          Users.add(newUser);
+        });
+      } else {
+        console.log('User already exists');
+        res.redirect('/signup');
+      }
+    });
 });
 
 
