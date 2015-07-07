@@ -24,10 +24,13 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 app.use(cookieParser());
-app.use(expressSession({secret:'wombat'}));
+app.use(expressSession({secret:'wombat', cookie : { maxAge: 60000 }}));
 
+
+var currentSessions = [];
 app.get('/', function(req, res) {
-  if(!req.session.username){
+  console.log('session id : ' + req.sessionID);
+  if(currentSessions.indexOf(req.sessionID) === -1){
     res.redirect('/login');
   }
   else
@@ -35,7 +38,7 @@ app.get('/', function(req, res) {
 });
 
 app.get('/create', function(req, res) {
-  if(!req.session.username) {
+  if(!req.session.token) {
     res.redirect('/login');
   } else {
     res.render('index');
@@ -43,7 +46,7 @@ app.get('/create', function(req, res) {
 });
 
 app.get('/links', function(req, res) {
-  if(!req.session.username) {
+  if(!req.session.token) {
     res.redirect('/login');
   } else {
     Links.reset().fetch().then(function(links) {
@@ -55,7 +58,7 @@ app.get('/links', function(req, res) {
 app.post('/links',
 function(req, res) {
   var uri = req.body.url;
-  if(!req.session.username) {
+  if(!req.session.token) {
     res.redirect('/login');
   }
   else if (!util.isValidUrl(uri)) {
@@ -100,22 +103,22 @@ app.post('/login', function (req, res) {
   var passWord = req.body.password;
 
   var currentUserModel = Users.where({username: userName}) || undefined;
-  // find the hash from the database table, compare it to the session variable
-  // on successful login, set the req.session.token to be stored
-  var dbUser = knex('users').where({
-    username : currentUserModel.get('username'),
-    password : currentUserModel.get('password')
-  });
 
-  if(dbUser){
-    // login here. Store a variable with a session
-    req.session.token = currentUserModel.get('password');
-    res.redirect('/');
+  if(currentUserModel[0] !== undefined){
+    db.knex.select('password').from('users');
+    if(!db.knex) console.log('knex connection error');
+    // db.knex.select('password').from('users').where({
+    //   username : currentUserModel[0].get('username'),
+    //   password : currentUserModel[0].get('password')
+    // }).then(function(d){
+    //   req.session.token = currentUserModel[0].get('password');
+    //   currentSessions.push(req.sessionID);
+    //   console.log(currentSessions);
+    //   res.redirect('/');
+    // })
   }else{
-    // not a user
-    res.redirect('login')
+    res.redirect('/login');
   }
-
 });
 
 app.get('/signup', function (req, res){
